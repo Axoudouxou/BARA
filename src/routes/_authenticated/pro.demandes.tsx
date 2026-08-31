@@ -8,6 +8,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { CancelBookingDialog } from "@/components/cancel-booking-dialog";
 import { OpenDisputeDialog } from "@/components/open-dispute-dialog";
+import { BookingLifecycleControls } from "@/components/booking-lifecycle-controls";
 
 export const Route = createFileRoute("/_authenticated/pro/demandes")({
   head: () => ({
@@ -29,6 +30,8 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   declined: { label: "Refusée", className: "bg-destructive/10 text-destructive" },
   cancelled: { label: "Annulée", className: "bg-muted text-muted-foreground" },
   completed: { label: "Terminée", className: "bg-primary-soft text-primary-soft-foreground" },
+  no_show_teacher: { label: "Professeur absent", className: "bg-destructive/10 text-destructive" },
+  no_show_parent: { label: "Famille absente", className: "bg-destructive/10 text-destructive" },
 };
 
 function formatSlot(iso: string) {
@@ -63,7 +66,7 @@ function TeacherRequestsPage() {
       const { data, error } = await supabase
         .from("bookings")
         .select(
-          "id, scheduled_at, duration_minutes, price_fcfa, format, commune, address, message, status, status_reason, is_recurring, recurrence_end_date, requester_id, children(first_name, school_level), teacher_offers(title, subjects(name))",
+          "id, scheduled_at, duration_minutes, price_fcfa, format, commune, address, message, status, status_reason, is_recurring, recurrence_end_date, requester_id, reschedule_count, reschedule_proposed_at, reschedule_proposed_by, reschedule_proposed_fee_rate, children(first_name, school_level), teacher_offers(title, subjects(name))",
         )
         .eq("teacher_id", user.id)
         .order("scheduled_at", { ascending: true });
@@ -235,6 +238,21 @@ function TeacherRequestsPage() {
                 </p>
               )}
 
+              <BookingLifecycleControls
+                booking={{
+                  id: r.id,
+                  status: r.status,
+                  scheduled_at: r.scheduled_at,
+                  reschedule_count: r.reschedule_count,
+                  reschedule_proposed_at: r.reschedule_proposed_at,
+                  reschedule_proposed_by: r.reschedule_proposed_by,
+                  reschedule_proposed_fee_rate: r.reschedule_proposed_fee_rate,
+                }}
+                role="teacher"
+                userId={user.id}
+                invalidateKeys={[["teacher-bookings", user.id]]}
+              />
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {r.status === "pending" && (
                   <>
@@ -280,7 +298,10 @@ function TeacherRequestsPage() {
                     <X className="size-3.5" aria-hidden /> Annuler la séance
                   </button>
                 )}
-                {(r.status === "completed" || r.status === "cancelled") && (
+                {(r.status === "completed" ||
+                  r.status === "cancelled" ||
+                  r.status === "no_show_teacher" ||
+                  r.status === "no_show_parent") && (
                   <OpenDisputeDialog
                     bookingId={r.id}
                     againstId={r.requester_id}

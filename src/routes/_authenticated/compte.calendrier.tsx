@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { CancelBookingDialog } from "@/components/cancel-booking-dialog";
+import { BookingLifecycleControls } from "@/components/booking-lifecycle-controls";
 import { STATUS_LABELS, formatTimeRange } from "./compte.reservations";
 
 export const Route = createFileRoute("/_authenticated/compte/calendrier")({
@@ -51,7 +52,7 @@ function CalendarPage() {
       const { data, error } = await supabase
         .from("bookings")
         .select(
-          "id, scheduled_at, duration_minutes, price_fcfa, format, commune, status, is_recurring, teacher_id, children(first_name), teacher_offers(title, subjects(name))",
+          "id, scheduled_at, duration_minutes, price_fcfa, format, commune, status, is_recurring, teacher_id, reschedule_count, reschedule_proposed_at, reschedule_proposed_by, reschedule_proposed_fee_rate, children(first_name), teacher_offers(title, subjects(name))",
         )
         .eq("requester_id", user.id)
         .gte("scheduled_at", weekStart.toISOString())
@@ -188,6 +189,25 @@ function CalendarPage() {
                       >
                         {status.label}
                       </span>
+
+                      <BookingLifecycleControls
+                        booking={{
+                          id: b.id,
+                          status: b.status,
+                          scheduled_at: b.scheduled_at,
+                          reschedule_count: b.reschedule_count,
+                          reschedule_proposed_at: b.reschedule_proposed_at,
+                          reschedule_proposed_by: b.reschedule_proposed_by,
+                          reschedule_proposed_fee_rate: b.reschedule_proposed_fee_rate,
+                        }}
+                        role="learner"
+                        userId={user.id}
+                        invalidateKeys={[
+                          ["calendar-bookings", user.id, weekStart.toISOString()],
+                          ["my-bookings", user.id],
+                        ]}
+                      />
+
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {(b.status === "accepted" || b.status === "completed") && (
                           <Link
