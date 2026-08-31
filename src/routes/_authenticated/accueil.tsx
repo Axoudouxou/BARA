@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { UpcomingHighlights } from "@/components/upcoming-highlights";
+import { HomeShortcutTabs } from "@/components/home-shortcut-tabs";
+import { AdminAlertsSection, LearnerTasksSection, TeacherTasksSection } from "@/components/home-role-sections";
+import { useConversations } from "@/lib/messaging";
 
 export const Route = createFileRoute("/_authenticated/accueil")({
   head: () => ({
@@ -38,7 +40,11 @@ type BookingRow = {
   created_at: string;
   teacher_id: string;
   children: { first_name: string } | null;
-  teacher_offers: { title: string; subjects: { name: string } | null } | null;
+  teacher_offers: {
+    title: string;
+    subject_id?: string;
+    subjects: { name: string; category_id?: string } | null;
+  } | null;
 };
 
 function formatSlot(iso: string, duration: number) {
@@ -110,7 +116,7 @@ function HomeScreen() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("display_name, city")
+        .select("display_name")
         .eq("user_id", user.id)
         .maybeSingle();
       if (error) throw error;
@@ -129,20 +135,11 @@ function HomeScreen() {
   }
 
   const firstName = (profileQuery.data?.display_name ?? "").split(" ")[0] ?? "";
-  const city = profileQuery.data?.city ?? null;
 
   if (roles.includes("admin")) return <AdminHome />;
-  if (roles.includes("teacher"))
-    return <TeacherHome userId={user.id} firstName={firstName} city={city} />;
+  if (roles.includes("teacher")) return <TeacherHome userId={user.id} firstName={firstName} />;
 
-  return (
-    <LearnerHome
-      userId={user.id}
-      firstName={firstName}
-      city={city}
-      isParent={roles.includes("parent")}
-    />
-  );
+  return <LearnerHome userId={user.id} firstName={firstName} isParent={roles.includes("parent")} />;
 }
 
 /* ---------------- Parent / Étudiant ---------------- */
@@ -164,12 +161,10 @@ function useTeacherCard(teacherId?: string | null) {
 function LearnerHome({
   userId,
   firstName,
-  city,
   isParent,
 }: {
   userId: string;
   firstName: string;
-  city: string | null;
   isParent: boolean;
 }) {
   const childrenQuery = useQuery({
@@ -191,7 +186,7 @@ function LearnerHome({
       const { data, error } = await supabase
         .from("bookings")
         .select(
-          "id, scheduled_at, duration_minutes, format, status, created_at, teacher_id, children(first_name), teacher_offers(title, subjects(name))",
+          "id, scheduled_at, duration_minutes, format, status, created_at, teacher_id, children(first_name), teacher_offers(title, subject_id, subjects(name, category_id))",
         )
         .eq("requester_id", userId)
         .order("scheduled_at", { ascending: false });
@@ -215,6 +210,18 @@ function LearnerHome({
   const childName = upcoming?.children?.first_name ?? children[0]?.first_name ?? "";
   const teacherCard = useTeacherCard(upcoming?.teacher_id ?? last?.teacher_id ?? null);
   const teacher = teacherCard.data;
+  const conversationsQuery = useConversations(userId, "learner");
+  const conversations = conversationsQuery.data ?? [];
+  const recentSubjectId = last?.teacher_offers?.subject_id ?? null;
+  const recentCategoryId = last?.teacher_offers?.subjects?.category_id ?? null;
+
+  const pendingOrAccepted = bookings.filter(
+    (b) => b.status === "pending" || b.status === "accepted",
+  );
+  const thisWeekEnd = now + 7 * 24 * 3600_000;
+  const thisWeek = pendingOrAccepted.filter(
+    (b) => new Date(b.scheduled_at).getTime() <= thisWeekEnd && new Date(b.scheduled_at).getTime() > now,
+  );
 
   if (bookingsQuery.isLoading) {
     return (
@@ -242,7 +249,7 @@ function LearnerHome({
       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
         {firstName ? `Bonjour ${firstName}` : "Bonjour"}
       </p>
-      <h1 className="mt-1 font-display text-2xl font-bold leading-tight text-foreground sm:text-3xl">
+      <h1 className="mt-1 font-display text-3xl font-bold leading-[1.1] tracking-tight text-foreground sm:text-4xl">
         {title}
       </h1>
 
@@ -345,7 +352,79 @@ function LearnerHome({
         )}
       </div>
 
-      <UpcomingHighlights city={city} />
+      <HomeShortcutTabs
+        tabs={[
+          {
+            key: "reservations",
+            label: "Réservations",
+            to: "/compte/reservations",
+            preview:
+              pendingOrAccepted.length > 0 ? (
+                <ul className="space-y-1.5 text-sm text-foreground">
+                  {pendingOrAccepted.slice(0, 3).map((b) => (
+                    <li key={b.id} className="truncate">
+                      {b.teacher_offers?.subjects?.name ?? "Cours"}
+                      {b.children?.first_name ? ` · ${b.children.first_name}` : ""} —{" "}
+                      {new Date(b.scheduled_at).toLocaleDateString("fr-FR", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucune réservation en cours.</p>
+              ),
+          },
+          {
+            key: "agenda",
+            label: "Agenda",
+            to: "/compte/calendrier",
+            preview:
+              thisWeek.length > 0 ? (
+                <p className="text-sm text-foreground">
+                  {thisWeek.length} séance{thisWeek.length > 1 ? "s" : ""} prévue
+                  {thisWeek.length > 1 ? "s" : ""} cette semaine, à commencer par le{" "}
+                  {new Date(thisWeek[0]!.scheduled_at).toLocaleDateString("fr-FR", {
+                    weekday: "long",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                  .
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Rien de prévu cette semaine.</p>
+              ),
+          },
+          {
+            key: "teachers",
+            label: "Mes professeurs",
+            to: "/messages",
+            preview:
+              conversations.length > 0 ? (
+                <ul className="space-y-1.5 text-sm text-foreground">
+                  {conversations.slice(0, 3).map((c) => (
+                    <li key={c.id} className="truncate">
+                      {c.otherName}
+                      {c.children?.first_name ? ` · ${c.children.first_name}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucun professeur contacté pour l'instant.</p>
+              ),
+          },
+        ]}
+      />
+
+      <LearnerTasksSection
+        userId={userId}
+        isParent={isParent}
+        childName={childName}
+        recentSubjectId={recentSubjectId}
+        recentCategoryId={recentCategoryId}
+      />
     </div>
   );
 }
@@ -361,15 +440,7 @@ function countdown24h(createdAt: string) {
   return h > 0 ? `${h} h ${m} min restantes` : `${m} min restantes`;
 }
 
-function TeacherHome({
-  userId,
-  firstName,
-  city,
-}: {
-  userId: string;
-  firstName: string;
-  city: string | null;
-}) {
+function TeacherHome({ userId, firstName }: { userId: string; firstName: string }) {
   const bookingsQuery = useQuery({
     queryKey: ["home-teacher-bookings", userId],
     queryFn: async () => {
@@ -419,6 +490,9 @@ function TeacherHome({
     },
   });
 
+  const studentConversationsQuery = useConversations(userId, "teacher");
+  const studentConversations = studentConversationsQuery.data ?? [];
+
   const bookings = bookingsQuery.data ?? [];
   const now = Date.now();
   const pending = bookings.filter((b) => b.status === "pending");
@@ -463,7 +537,7 @@ function TeacherHome({
       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
         {firstName ? `Bonjour ${firstName}` : "Espace professeur"}
       </p>
-      <h1 className="mt-1 font-display text-2xl font-bold leading-tight text-foreground sm:text-3xl">
+      <h1 className="mt-1 font-display text-3xl font-bold leading-[1.1] tracking-tight text-foreground sm:text-4xl">
         {title}
       </h1>
 
@@ -506,24 +580,29 @@ function TeacherHome({
           </>
         ) : next ? (
           <>
-            <p className="text-xs font-bold uppercase tracking-wide text-primary">Prochaine séance</p>
-            <p className="mt-1 font-display text-lg font-bold text-foreground">
-              {next.teacher_offers?.title ?? "Cours particulier"}
-            </p>
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <CalendarClock className="size-4" aria-hidden />
-                {formatSlot(next.scheduled_at, next.duration_minutes)}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                {next.format === "online" ? (
-                  <Laptop className="size-4" aria-hidden />
-                ) : (
-                  <Home className="size-4" aria-hidden />
-                )}
-                {formatLabel(next.format)}
-              </span>
-            </p>
+            <div className="flex items-start gap-4">
+              <Avatar name={next.children?.first_name ?? "Élève"} />
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wide text-primary">Prochaine séance</p>
+                <p className="mt-0.5 font-display text-lg font-bold text-foreground">
+                  {next.teacher_offers?.title ?? "Cours particulier"}
+                </p>
+                <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarClock className="size-4" aria-hidden />
+                    {formatSlot(next.scheduled_at, next.duration_minutes)}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    {next.format === "online" ? (
+                      <Laptop className="size-4" aria-hidden />
+                    ) : (
+                      <Home className="size-4" aria-hidden />
+                    )}
+                    {formatLabel(next.format)}
+                  </span>
+                </p>
+              </div>
+            </div>
             <div className="mt-5">
               <Link to="/pro/demandes" className={CTA}>
                 Voir le planning
@@ -565,7 +644,76 @@ function TeacherHome({
         )}
       </div>
 
-      <UpcomingHighlights city={city} />
+      <HomeShortcutTabs
+        tabs={[
+          {
+            key: "sessions",
+            label: "Mes séances",
+            to: "/pro/demandes",
+            preview:
+              pending.length > 0 || next ? (
+                <ul className="space-y-1.5 text-sm text-foreground">
+                  {pending.length > 0 && (
+                    <li>
+                      {pending.length} demande{pending.length > 1 ? "s" : ""} en attente de réponse.
+                    </li>
+                  )}
+                  {next && (
+                    <li className="truncate">
+                      Prochaine séance : {next.teacher_offers?.subjects?.name ?? "Cours"} —{" "}
+                      {new Date(next.scheduled_at).toLocaleDateString("fr-FR", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </li>
+                  )}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucune séance en cours.</p>
+              ),
+          },
+          {
+            key: "agenda",
+            label: "Agenda",
+            to: "/pro/disponibilites",
+            preview:
+              (c?.availabilities ?? 0) > 0 ? (
+                <p className="text-sm text-foreground">
+                  {c!.availabilities} créneau{c!.availabilities > 1 ? "x" : ""} hebdomadaire
+                  {c!.availabilities > 1 ? "s" : ""} configuré{c!.availabilities > 1 ? "s" : ""}.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Aucune disponibilité renseignée pour l'instant.
+                </p>
+              ),
+          },
+          {
+            key: "students",
+            label: "Mes élèves",
+            to: "/pro/messages",
+            preview:
+              studentConversations.length > 0 ? (
+                <ul className="space-y-1.5 text-sm text-foreground">
+                  {studentConversations.slice(0, 3).map((sc) => (
+                    <li key={sc.id} className="truncate">
+                      {sc.otherName}
+                      {sc.children?.first_name ? ` · ${sc.children.first_name}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucun élève contacté pour l'instant.</p>
+              ),
+          },
+        ]}
+      />
+
+      <TeacherTasksSection
+        userId={userId}
+        missingProfileItems={missing as string[]}
+        hideProfileCard={pending.length === 0 && !next}
+      />
     </div>
   );
 }
@@ -662,6 +810,8 @@ function AdminHome() {
           Modération des offres
         </Link>
       </div>
+
+      <AdminAlertsSection />
     </div>
   );
 }
