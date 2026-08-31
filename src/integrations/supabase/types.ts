@@ -175,6 +175,57 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_reschedule_credits: {
+        Row: {
+          amount_fcfa: number
+          applied_at: string | null
+          applied_to_booking_id: string | null
+          created_at: string
+          id: string
+          parent_id: string
+          source_booking_id: string
+          status: string
+          teacher_id: string
+        }
+        Insert: {
+          amount_fcfa: number
+          applied_at?: string | null
+          applied_to_booking_id?: string | null
+          created_at?: string
+          id?: string
+          parent_id: string
+          source_booking_id: string
+          status?: string
+          teacher_id: string
+        }
+        Update: {
+          amount_fcfa?: number
+          applied_at?: string | null
+          applied_to_booking_id?: string | null
+          created_at?: string
+          id?: string
+          parent_id?: string
+          source_booking_id?: string
+          status?: string
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_reschedule_credits_applied_to_booking_id_fkey"
+            columns: ["applied_to_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_reschedule_credits_source_booking_id_fkey"
+            columns: ["source_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           address: string | null
@@ -190,10 +241,17 @@ export type Database = {
           id: string
           is_recurring: boolean
           message: string | null
+          no_show_reported_at: string | null
+          no_show_reported_by: string | null
           offer_id: string
           price_fcfa: number
           recurrence_end_date: string | null
           requester_id: string
+          reschedule_count: number
+          reschedule_previous_at: string | null
+          reschedule_proposed_at: string | null
+          reschedule_proposed_by: string | null
+          reschedule_proposed_fee_rate: number | null
           scheduled_at: string
           status: string
           status_reason: string | null
@@ -214,10 +272,17 @@ export type Database = {
           id?: string
           is_recurring?: boolean
           message?: string | null
+          no_show_reported_at?: string | null
+          no_show_reported_by?: string | null
           offer_id: string
           price_fcfa: number
           recurrence_end_date?: string | null
           requester_id: string
+          reschedule_count?: number
+          reschedule_previous_at?: string | null
+          reschedule_proposed_at?: string | null
+          reschedule_proposed_by?: string | null
+          reschedule_proposed_fee_rate?: number | null
           scheduled_at: string
           status?: string
           status_reason?: string | null
@@ -238,10 +303,17 @@ export type Database = {
           id?: string
           is_recurring?: boolean
           message?: string | null
+          no_show_reported_at?: string | null
+          no_show_reported_by?: string | null
           offer_id?: string
           price_fcfa?: number
           recurrence_end_date?: string | null
           requester_id?: string
+          reschedule_count?: number
+          reschedule_previous_at?: string | null
+          reschedule_proposed_at?: string | null
+          reschedule_proposed_by?: string | null
+          reschedule_proposed_fee_rate?: number | null
           scheduled_at?: string
           status?: string
           status_reason?: string | null
@@ -733,6 +805,62 @@ export type Database = {
         }
         Relationships: []
       }
+      reschedule_ledger: {
+        Row: {
+          booking_id: string
+          created_at: string
+          fee_amount_fcfa: number
+          fee_payee_id: string | null
+          fee_payer_id: string | null
+          fee_rate: number
+          force_majeure_reason: string | null
+          id: string
+          is_force_majeure: boolean
+          new_scheduled_at: string
+          previous_scheduled_at: string
+          requested_by: string
+          reschedule_number: number
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          fee_amount_fcfa?: number
+          fee_payee_id?: string | null
+          fee_payer_id?: string | null
+          fee_rate?: number
+          force_majeure_reason?: string | null
+          id?: string
+          is_force_majeure?: boolean
+          new_scheduled_at: string
+          previous_scheduled_at: string
+          requested_by: string
+          reschedule_number: number
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          fee_amount_fcfa?: number
+          fee_payee_id?: string | null
+          fee_payer_id?: string | null
+          fee_rate?: number
+          force_majeure_reason?: string | null
+          id?: string
+          is_force_majeure?: boolean
+          new_scheduled_at?: string
+          previous_scheduled_at?: string
+          requested_by?: string
+          reschedule_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reschedule_ledger_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reviews: {
         Row: {
           author_id: string
@@ -1175,6 +1303,7 @@ export type Database = {
         Args: {
           p_dispute_id: string
           p_refund_fcfa?: number
+          p_reschedule_to?: string
           p_resolution?: string
           p_status: string
         }
@@ -1359,6 +1488,46 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_reschedule_proposal: {
+        Args: { p_booking_id: string }
+        Returns: {
+          address: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          child_id: string | null
+          city: string
+          commune: string | null
+          completed_at: string | null
+          created_at: string
+          duration_minutes: number
+          format: string
+          id: string
+          is_recurring: boolean
+          message: string | null
+          no_show_reported_at: string | null
+          no_show_reported_by: string | null
+          offer_id: string
+          price_fcfa: number
+          recurrence_end_date: string | null
+          requester_id: string
+          reschedule_count: number
+          reschedule_previous_at: string | null
+          reschedule_proposed_at: string | null
+          reschedule_proposed_by: string | null
+          reschedule_proposed_fee_rate: number | null
+          scheduled_at: string
+          status: string
+          status_reason: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       complete_booking: {
         Args: { p_booking_id: string }
         Returns: {
@@ -1450,6 +1619,46 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      force_majeure_reschedule: {
+        Args: { p_booking_id: string; p_new_scheduled_at: string; p_reason: string }
+        Returns: {
+          address: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          child_id: string | null
+          city: string
+          commune: string | null
+          completed_at: string | null
+          created_at: string
+          duration_minutes: number
+          format: string
+          id: string
+          is_recurring: boolean
+          message: string | null
+          no_show_reported_at: string | null
+          no_show_reported_by: string | null
+          offer_id: string
+          price_fcfa: number
+          recurrence_end_date: string | null
+          requester_id: string
+          reschedule_count: number
+          reschedule_previous_at: string | null
+          reschedule_proposed_at: string | null
+          reschedule_proposed_by: string | null
+          reschedule_proposed_fee_rate: number | null
+          scheduled_at: string
+          status: string
+          status_reason: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_teacher_full_public: { Args: { p_teacher_id: string }; Returns: Json }
       get_teacher_public: {
         Args: { p_teacher_id: string }
@@ -1514,6 +1723,46 @@ export type Database = {
         Args: { p_child_id: string; p_learner_id: string; p_teacher_id: string }
         Returns: boolean
       }
+      propose_reschedule: {
+        Args: { p_booking_id: string; p_new_scheduled_at: string }
+        Returns: {
+          address: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          child_id: string | null
+          city: string
+          commune: string | null
+          completed_at: string | null
+          created_at: string
+          duration_minutes: number
+          format: string
+          id: string
+          is_recurring: boolean
+          message: string | null
+          no_show_reported_at: string | null
+          no_show_reported_by: string | null
+          offer_id: string
+          price_fcfa: number
+          recurrence_end_date: string | null
+          requester_id: string
+          reschedule_count: number
+          reschedule_previous_at: string | null
+          reschedule_proposed_at: string | null
+          reschedule_proposed_by: string | null
+          reschedule_proposed_fee_rate: number | null
+          scheduled_at: string
+          status: string
+          status_reason: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       quote_booking_refund: {
         Args: { p_booking_id: string }
         Returns: {
@@ -1524,6 +1773,126 @@ export type Database = {
           refund_fcfa: number
           refund_rate: number
         }[]
+      }
+      report_parent_no_show: {
+        Args: { p_booking_id: string }
+        Returns: {
+          address: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          child_id: string | null
+          city: string
+          commune: string | null
+          completed_at: string | null
+          created_at: string
+          duration_minutes: number
+          format: string
+          id: string
+          is_recurring: boolean
+          message: string | null
+          no_show_reported_at: string | null
+          no_show_reported_by: string | null
+          offer_id: string
+          price_fcfa: number
+          recurrence_end_date: string | null
+          requester_id: string
+          reschedule_count: number
+          reschedule_previous_at: string | null
+          reschedule_proposed_at: string | null
+          reschedule_proposed_by: string | null
+          reschedule_proposed_fee_rate: number | null
+          scheduled_at: string
+          status: string
+          status_reason: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      report_teacher_no_show: {
+        Args: { p_booking_id: string }
+        Returns: {
+          address: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          child_id: string | null
+          city: string
+          commune: string | null
+          completed_at: string | null
+          created_at: string
+          duration_minutes: number
+          format: string
+          id: string
+          is_recurring: boolean
+          message: string | null
+          no_show_reported_at: string | null
+          no_show_reported_by: string | null
+          offer_id: string
+          price_fcfa: number
+          recurrence_end_date: string | null
+          requester_id: string
+          reschedule_count: number
+          reschedule_previous_at: string | null
+          reschedule_proposed_at: string | null
+          reschedule_proposed_by: string | null
+          reschedule_proposed_fee_rate: number | null
+          scheduled_at: string
+          status: string
+          status_reason: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      respond_reschedule: {
+        Args: { p_accept: boolean; p_booking_id: string }
+        Returns: {
+          address: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          child_id: string | null
+          city: string
+          commune: string | null
+          completed_at: string | null
+          created_at: string
+          duration_minutes: number
+          format: string
+          id: string
+          is_recurring: boolean
+          message: string | null
+          no_show_reported_at: string | null
+          no_show_reported_by: string | null
+          offer_id: string
+          price_fcfa: number
+          recurrence_end_date: string | null
+          requester_id: string
+          reschedule_count: number
+          reschedule_previous_at: string | null
+          reschedule_proposed_at: string | null
+          reschedule_proposed_by: string | null
+          reschedule_proposed_fee_rate: number | null
+          scheduled_at: string
+          status: string
+          status_reason: string | null
+          teacher_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       search_teachers: {
         Args: {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Gavel, Loader2 } from "lucide-react";
+import { Gavel, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -44,7 +44,26 @@ function AdminDisputes() {
   const isAdmin = adminQuery.data ?? false;
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("active");
-  const [drafts, setDrafts] = useState<Record<string, { resolution: string; refund: string }>>({});
+  const [drafts, setDrafts] = useState<
+    Record<string, { resolution: string; refund: string; reschedule: string }>
+  >({});
+
+  const forceMajeureQuery = useQuery({
+    queryKey: ["admin-force-majeure-reschedules"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("reschedule_ledger")
+        .select(
+          "id, booking_id, requested_by, force_majeure_reason, previous_scheduled_at, new_scheduled_at, created_at",
+        )
+        .eq("is_force_majeure", true)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const disputesQuery = useQuery({
     queryKey: ["admin-disputes", filter],
@@ -71,6 +90,7 @@ function AdminDisputes() {
       status: string;
       resolution?: string | undefined;
       refund?: number | undefined;
+      rescheduleTo?: string | undefined;
     }) => {
       const resolution = input.resolution?.trim();
       const payload: Record<string, unknown> = {
@@ -78,8 +98,11 @@ function AdminDisputes() {
         p_status: input.status,
       };
       if (resolution) payload["p_resolution"] = resolution;
-      if (typeof input.refund === "number" && !Number.isNaN(input.refund))
+      if (input.rescheduleTo) {
+        payload["p_reschedule_to"] = new Date(input.rescheduleTo).toISOString();
+      } else if (typeof input.refund === "number" && !Number.isNaN(input.refund)) {
         payload["p_refund_fcfa"] = input.refund;
+      }
       const { error } = await supabase.rpc(
         "admin_resolve_dispute",
         payload as { p_dispute_id: string; p_status: string },
@@ -102,6 +125,34 @@ function AdminDisputes() {
       title="Litiges"
       description="Instruisez les litiges déclarés par les parents, élèves et professeurs. Le remboursement décidé est enregistré à titre de décision : aucun mouvement d'argent réel n'est effectué."
     >
+      {(forceMajeureQuery.data?.length ?? 0) > 0 && (
+        <div className="mb-6 rounded-3xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
+          <p className="flex items-center gap-2 font-display text-sm font-bold text-foreground">
+            <ShieldAlert className="size-4 text-destructive" aria-hidden />
+            Reports pour cas de force majeure (20 derniers)
+          </p>
+          <ul className="mt-3 space-y-2">
+            {forceMajeureQuery.data!.map((fm) => (
+              <li key={fm.id} className="rounded-2xl bg-muted/50 px-4 py-2.5 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  {new Date(fm.created_at).toLocaleDateString("fr-FR", { dateStyle: "medium" })}
+                </span>{" "}
+                — séance déplacée du{" "}
+                {new Date(fm.previous_scheduled_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}{" "}
+                au{" "}
+                {new Date(fm.new_scheduled_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
+                {fm.force_majeure_reason && (
+                  <>
+                    {" "}
+                    · Motif : <span className="italic">{fm.force_majeure_reason}</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button
@@ -130,7 +181,7 @@ function AdminDisputes() {
       ) : (
         <ul className="mt-6 space-y-4">
           {disputes.map((d) => {
-            const draft = drafts[d.id] ?? { resolution: "", refund: "" };
+            const draft = drafts[d.id] ?? { resolution: "", refund: "", reschedule: "" };
             return (
               <li
                 key={d.id}
@@ -193,19 +244,37 @@ function AdminDisputes() {
                       placeholder="Décision et motivation"
                       className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Révision exceptionnelle : renseignez soit un remboursement, soit un nouveau
+                      créneau (pas les deux) avant de résoudre.
+                    </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         value={draft.refund}
                         onChange={(e) =>
                           setDrafts((s) => ({
                             ...s,
-                            [d.id]: { ...draft, refund: e.target.value.replace(/\D/g, "") },
+                            [d.id]: { ...draft, refund: e.target.value.replace(/\D/g, ""), reschedule: "" },
                           }))
                         }
                         inputMode="numeric"
-                        placeholder="Remboursement décidé (FCFA)"
+                        placeholder="Remboursement exceptionnel (FCFA)"
                         className="w-56 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
                       />
+                      <input
+                        type="datetime-local"
+                        value={draft.reschedule}
+                        onChange={(e) =>
+                          setDrafts((s) => ({
+                            ...s,
+                            [d.id]: { ...draft, reschedule: e.target.value, refund: "" },
+                          }))
+                        }
+                        className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground"
+                        aria-label="Nouveau créneau (report exceptionnel)"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
                       {d.status === "open" && (
                         <button
                           type="button"
@@ -227,11 +296,12 @@ function AdminDisputes() {
                             status: "resolved",
                             resolution: draft.resolution,
                             refund: draft.refund ? Number(draft.refund) : undefined,
+                            rescheduleTo: draft.reschedule || undefined,
                           })
                         }
                         className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                       >
-                        Résoudre
+                        {draft.reschedule ? "Accorder ce report" : "Résoudre"}
                       </button>
                       <button
                         type="button"
