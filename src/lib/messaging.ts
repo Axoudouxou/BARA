@@ -77,7 +77,9 @@ export function useConversations(userId: string, side: MessagingSide) {
           const other = nameById.get(side === "teacher" ? c.learner_id : c.teacher_id);
           return {
             ...c,
-            otherName: other?.name ?? (side === "teacher" ? "Élève" : "Professeur"),
+            otherName:
+              other?.name ??
+              (side === "teacher" ? "Élève sans nom renseigné" : "Professeur sans nom renseigné"),
             otherAvatar: other?.avatar ?? null,
             lastBody: last?.body ?? null,
             lastAt: last?.created_at ?? c.last_message_at ?? null,
@@ -85,6 +87,35 @@ export function useConversations(userId: string, side: MessagingSide) {
           };
         })
         .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
+    },
+  });
+}
+
+export type StudentProfile = {
+  name: string | null;
+  is_child: boolean;
+  school_level: string | null;
+  subjects: string[];
+  sessions_count: number;
+  first_session_at: string | null;
+};
+
+/**
+ * Résumé pédagogique d'un élève (ou de l'enfant suivi par un parent), pour
+ * l'aperçu de profil dans la messagerie professeur. N'expose que ce que le
+ * professeur peut déjà voir ailleurs (nom, niveau, matières suivies avec
+ * lui, historique de séances) — jamais l'adresse ni les coordonnées.
+ */
+export function useStudentProfile(learnerId: string, childId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["teacher-student-profile", learnerId, childId],
+    enabled: enabled && Boolean(learnerId),
+    queryFn: async (): Promise<StudentProfile> => {
+      const args: { p_learner_id: string; p_child_id?: string } = { p_learner_id: learnerId };
+      if (childId) args.p_child_id = childId;
+      const { data, error } = await supabase.rpc("teacher_student_profile", args);
+      if (error) throw error;
+      return data as unknown as StudentProfile;
     },
   });
 }
