@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ClipboardList, Loader2, MessageSquare, Plus } from "lucide-react";
+import { AlertTriangle, ClipboardList, Loader2, MessageSquare, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -71,7 +71,7 @@ function TeacherMessages() {
           learnerId: r.requester_id,
           childId: r.child_id,
           childName: (r.children as { first_name: string } | null)?.first_name ?? null,
-          learnerName: nameById.get(r.requester_id) ?? "Élève",
+          learnerName: nameById.get(r.requester_id) ?? "Élève sans nom renseigné",
           subjects: subject ? [subject] : [],
         });
       }
@@ -173,7 +173,7 @@ function TeacherMessages() {
                 <span className="min-w-0">
                   <span className="font-semibold text-foreground">{a.title}</span>
                   <span className="ml-2 text-xs text-muted-foreground">
-                    {a.learner_name ?? "Élève"} ·{" "}
+                    {a.learner_name ?? "Élève sans nom renseigné"} ·{" "}
                     {new Date(a.created_at).toLocaleDateString("fr-FR", {
                       day: "numeric",
                       month: "long",
@@ -189,31 +189,60 @@ function TeacherMessages() {
         </div>
       )}
 
-      {conversationsQuery.isLoading && (
+      {(conversationsQuery.isLoading || pairsQuery.isLoading) && (
         <p className="mt-8 flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" aria-hidden /> Chargement…
         </p>
       )}
 
-      {!conversationsQuery.isLoading && conversations.length === 0 && missingPairs.length === 0 && (
-        <div className="mt-8 rounded-3xl border border-border bg-card p-8 text-center shadow-[var(--shadow-card)]">
-          <MessageSquare className="mx-auto size-6 text-primary" aria-hidden />
-          <p className="mt-3 font-display text-lg font-bold text-foreground">
-            Aucun élève à contacter
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            La messagerie s&apos;ouvre dès que vous acceptez une demande de cours.
-          </p>
-          <Link
-            to="/pro/demandes"
-            className="mt-6 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            Voir mes demandes
-          </Link>
-        </div>
-      )}
+      {!conversationsQuery.isLoading &&
+        !pairsQuery.isLoading &&
+        (conversationsQuery.isError || pairsQuery.isError) && (
+          <div className="mt-8 rounded-3xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <AlertTriangle className="mx-auto size-6 text-destructive" aria-hidden />
+            <p className="mt-3 font-display text-lg font-bold text-foreground">
+              Impossible de charger la messagerie
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Une erreur réseau ou de connexion a empêché le chargement de vos élèves. Vérifiez
+              votre connexion et réessayez.
+            </p>
+            <button
+              onClick={() => {
+                if (conversationsQuery.isError) conversationsQuery.refetch();
+                if (pairsQuery.isError) pairsQuery.refetch();
+              }}
+              className="mt-6 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Réessayer
+            </button>
+          </div>
+        )}
 
-      {(conversations.length > 0 || missingPairs.length > 0) && (
+      {!conversationsQuery.isLoading &&
+        !pairsQuery.isLoading &&
+        !conversationsQuery.isError &&
+        !pairsQuery.isError &&
+        conversations.length === 0 &&
+        missingPairs.length === 0 && (
+          <div className="mt-8 rounded-3xl border border-border bg-card p-8 text-center shadow-[var(--shadow-card)]">
+            <MessageSquare className="mx-auto size-6 text-primary" aria-hidden />
+            <p className="mt-3 font-display text-lg font-bold text-foreground">
+              Aucune conversation pour l&apos;instant
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              La messagerie s&apos;ouvre dès que vous acceptez une demande de cours.
+            </p>
+            <Link
+              to="/pro/demandes"
+              className="mt-6 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Voir mes demandes
+            </Link>
+          </div>
+        )}
+
+      {!conversationsQuery.isError && !pairsQuery.isError && (conversations.length > 0 || missingPairs.length > 0) && (
         <div className="mt-6 grid gap-5 lg:grid-cols-[320px_1fr]">
           <aside className="space-y-3">
             {conversations.map((c) => {
@@ -282,6 +311,8 @@ function TeacherMessages() {
               }
               learnerLabel={active.children?.first_name ?? active.otherName}
               childAuthUserId={active.children?.auth_user_id ?? null}
+              learnerId={active.learner_id}
+              childId={active.child_id}
             />
           ) : (
             <div className="rounded-3xl border border-border bg-card p-8 text-sm text-muted-foreground">

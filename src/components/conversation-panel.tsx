@@ -3,17 +3,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
   CheckCircle2,
+  ChevronDown,
   Download,
+  GraduationCap,
   Loader2,
   MessageSquare,
   Paperclip,
   Send,
   Sparkles,
+  UserRound,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { useStudentProfile, type StudentProfile } from "@/lib/messaging";
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const BUCKET = "message-files";
@@ -78,6 +82,8 @@ export function ConversationPanel({
   subtitle,
   learnerLabel,
   childAuthUserId,
+  learnerId,
+  childId,
 }: {
   conversationId: string;
   role: PanelRole;
@@ -87,14 +93,20 @@ export function ConversationPanel({
   /** prénom de l'apprenant (enfant ou adulte) pour les statuts */
   learnerLabel: string;
   childAuthUserId?: string | null;
+  /** identifiants du binôme, pour l'aperçu de profil élève côté professeur */
+  learnerId?: string;
+  childId?: string | null;
 }) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"chat" | "resources">(role === "child" ? "resources" : "chat");
   const [draft, setDraft] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const canChat = role !== "child";
+  const canViewProfile = role === "teacher" && Boolean(learnerId);
+  const profileQuery = useStudentProfile(learnerId ?? "", childId ?? null, canViewProfile && showProfile);
 
   // Rafraîchissement quasi temps réel par polling (5 s) : simple, robuste hors WebSocket.
   const messagesQuery = useQuery({
@@ -215,8 +227,34 @@ export function ConversationPanel({
   return (
     <div className="flex min-h-[60vh] flex-col rounded-3xl border border-border bg-card shadow-[var(--shadow-card)]">
       <header className="border-b border-border px-4 py-4 sm:px-6">
-        <p className="font-display text-lg font-bold text-foreground">{title}</p>
-        {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-display text-lg font-bold text-foreground">{title}</p>
+            {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
+          </div>
+          {canViewProfile && (
+            <button
+              type="button"
+              onClick={() => setShowProfile((v) => !v)}
+              aria-expanded={showProfile}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                showProfile
+                  ? "border-primary bg-primary-soft text-primary-soft-foreground"
+                  : "border-border text-foreground hover:bg-secondary"
+              }`}
+            >
+              <UserRound className="size-3.5" aria-hidden />
+              Voir le profil
+              <ChevronDown
+                className={`size-3.5 transition-transform ${showProfile ? "rotate-180" : ""}`}
+                aria-hidden
+              />
+            </button>
+          )}
+        </div>
+        {canViewProfile && showProfile && (
+          <StudentProfileCard query={profileQuery} fallbackName={learnerLabel} />
+        )}
         <p className="mt-2 text-[11px] text-muted-foreground">
           Les coordonnées personnelles ne sont jamais partagées : tout se règle ici.
         </p>
@@ -568,5 +606,89 @@ function NewAssignmentForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function formatSessionDate(iso: string) {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+/**
+ * Aperçu du profil pédagogique de l'élève, accessible sans quitter la
+ * conversation. N'affiche que les champs réellement renseignés (pas de
+ * ligne vide) et ne reprend jamais d'adresse ni de coordonnées directes,
+ * que la fonction RPC sous-jacente n'expose de toute façon pas.
+ */
+function StudentProfileCard({
+  query,
+  fallbackName,
+}: {
+  query: { data?: StudentProfile; isLoading: boolean; isError: boolean; refetch: () => void };
+  fallbackName: string;
+}) {
+  const profile = query.data;
+
+  const rows: { label: string; value: string }[] = [];
+  if (profile) {
+    if (profile.school_level) rows.push({ label: "Niveau scolaire", value: profile.school_level });
+    if (profile.subjects.length > 0) rows.push({ label: "Matières suivies", value: profile.subjects.join(", ") });
+    if (profile.sessions_count > 0) {
+      rows.push({
+        label: "Séances suivies avec vous",
+        value: String(profile.sessions_count),
+      });
+    }
+    if (profile.first_session_at) {
+      rows.push({ label: "Première séance", value: formatSessionDate(profile.first_session_at) });
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-border bg-secondary/40 p-4">
+      {query.isLoading && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden /> Chargement du profil…
+        </p>
+      )}
+      {query.isError && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">Impossible de charger le profil.</p>
+          <button
+            type="button"
+            onClick={() => query.refetch()}
+            className="shrink-0 text-xs font-semibold text-primary hover:underline"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
+      {!query.isLoading && !query.isError && profile && (
+        <>
+          <div className="flex items-center gap-2">
+            <GraduationCap className="size-4 text-primary" aria-hidden />
+            <p className="text-sm font-semibold text-foreground">{profile.name ?? fallbackName}</p>
+            {profile.is_child && (
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary-soft-foreground">
+                Enfant suivi par un parent
+              </span>
+            )}
+          </div>
+          {rows.length > 0 ? (
+            <dl className="mt-3 space-y-1.5">
+              {rows.map((row) => (
+                <div key={row.label} className="flex flex-wrap gap-x-2 text-xs">
+                  <dt className="text-muted-foreground">{row.label} :</dt>
+                  <dd className="font-semibold text-foreground">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Aucune information pédagogique renseignée pour le moment.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }

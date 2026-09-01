@@ -1990,6 +1990,10 @@ export type Database = {
         }
       }
       teacher_recent_assignments: { Args: { p_limit?: number }; Returns: Json }
+      teacher_student_profile: {
+        Args: { p_child_id?: string; p_learner_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "parent" | "student" | "teacher" | "admin"
