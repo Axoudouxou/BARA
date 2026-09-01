@@ -5,11 +5,22 @@ import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
 
 function publicClient() {
-  return createClient<Database>(
-    process.env["SUPABASE_URL"]!,
-    process.env["SUPABASE_PUBLISHABLE_KEY"]!,
-    { auth: { storage: undefined, persistSession: false, autoRefreshToken: false } },
-  );
+  const SUPABASE_URL = process.env["SUPABASE_URL"];
+  const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"];
+
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    const missing = [
+      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
+      ...(!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
+    ];
+    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud, or set them in .env for local development.`;
+    console.error(`[Supabase] ${message}`);
+    throw new Error(message);
+  }
+
+  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
 }
 
 export const searchFiltersSchema = z.object({
@@ -19,7 +30,9 @@ export const searchFiltersSchema = z.object({
   format: z.enum(["home", "online"]).optional(),
   ville: z.string().trim().max(80).optional(),
   commune: z.string().trim().max(80).optional(),
+  prixMin: z.coerce.number().int().nonnegative().max(1000000).optional(),
   prixMax: z.coerce.number().int().positive().max(1000000).optional(),
+  jour: z.coerce.number().int().min(0).max(6).optional(),
 });
 
 export type SearchFilters = z.infer<typeof searchFiltersSchema>;
@@ -31,13 +44,20 @@ export type TeacherCard = {
   city: string | null;
   commune: string | null;
   headline: string | null;
+  bio: string | null;
+  teaching_method: string | null;
   years_experience: number | null;
   identity_verified: boolean;
   qualifications_verified: boolean;
   offers_home: boolean;
   offers_online: boolean;
   min_price_fcfa: number;
+  sample_offer_id: string | null;
   subjects: string[];
+  rating_avg: number | null;
+  rating_count: number;
+  students_count: number;
+  lessons_count: number;
 };
 
 export const getCatalog = createServerFn({ method: "GET" }).handler(async () => {
@@ -68,7 +88,9 @@ export const searchTeachers = createServerFn({ method: "GET" })
     if (data.format) args["p_format"] = data.format;
     if (data.ville) args["p_city"] = data.ville;
     if (data.commune) args["p_commune"] = data.commune;
+    if (data.prixMin !== undefined) args["p_min_price"] = data.prixMin;
     if (data.prixMax) args["p_max_price"] = data.prixMax;
+    if (data.jour !== undefined) args["p_weekday"] = data.jour;
     const { data: rows, error } = await supabase.rpc("search_teachers", args);
 
     if (error) throw error;

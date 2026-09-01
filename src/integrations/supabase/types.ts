@@ -1902,23 +1902,32 @@ export type Database = {
           p_level_slug?: string
           p_limit?: number
           p_max_price?: number
+          p_min_price?: number
           p_offset?: number
           p_query?: string
           p_subject_slug?: string
+          p_weekday?: number
         }
         Returns: {
           avatar_url: string
+          bio: string
           city: string
           commune: string
           display_name: string
           headline: string
           identity_verified: boolean
+          lessons_count: number
           min_price_fcfa: number
           offers_home: boolean
           offers_online: boolean
           qualifications_verified: boolean
+          rating_avg: number
+          rating_count: number
+          sample_offer_id: string
+          students_count: number
           subjects: string[]
           teacher_id: string
+          teaching_method: string
           years_experience: number
         }[]
       }
