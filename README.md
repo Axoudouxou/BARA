@@ -18,6 +18,7 @@ Prefer working locally? You need Node.js and npm — [install with nvm](https://
 git clone <this-repository-url>
 cd <repository-name>
 npm i
+cp .env.example .env  # fill in your Supabase project's URL and keys
 npm run dev
 ```
 

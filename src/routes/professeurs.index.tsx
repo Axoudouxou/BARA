@@ -30,14 +30,21 @@ export const Route = createFileRoute("/professeurs/")({
     ],
   }),
   component: TeachersPage,
-  errorComponent: () => (
-    <div className="container-page py-16 text-center">
-      <h1 className="font-display text-2xl font-bold text-foreground">
-        La recherche n'a pas pu se charger
-      </h1>
-      <p className="mt-2 text-sm text-muted-foreground">Réessayez dans un instant.</p>
-    </div>
-  ),
+  errorComponent: ({ error }) => {
+    console.error(error);
+    return (
+      <div className="container-page py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-foreground">
+          La recherche n'a pas pu se charger
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Réessayez dans un instant. En développement local, consultez la console : cette page
+          échoue le plus souvent faute de variables d'environnement Supabase (SUPABASE_URL,
+          SUPABASE_PUBLISHABLE_KEY) — voir le fichier .env.example à la racine du projet.
+        </p>
+      </div>
+    );
+  },
   notFoundComponent: () => (
     <div className="container-page py-16 text-center text-muted-foreground">Page introuvable.</div>
   ),
